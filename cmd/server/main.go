@@ -25,9 +25,6 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
-	// Debug: show what was loaded
-	logConfig(cfg)
-
 	// Initialize template renderer
 	renderer, err := views.NewRenderer()
 	if err != nil {
@@ -69,6 +66,7 @@ func main() {
 	api.Get("/benchmark", paymentHandler.Benchmark)
 	api.Post("/payments", paymentHandler.InitiatePayment)
 	api.Get("/payments/status", paymentHandler.GetPaymentStatus)
+	api.Get("/payments/paymob-status", paymentHandler.QueryPayMobStatus)
 	api.Get("/dashboard", dashboardHandler.GetDashboardData)
 	api.Get("/dashboard/html", dashboardHandler.GetDashboardHTML)
 	api.Post("/simulate/:order_id", paymentHandler.SimulatePaymentSuccess)
@@ -92,8 +90,6 @@ func main() {
 		log.Printf("📋 MODE: DEMO (simulation only)")
 	} else {
 		log.Printf("💳 MODE: PRODUCTION (real PayMob payments)")
-		log.Printf("   Integration ID: %s", cfg.PayMobIntegrationID)
-		log.Printf("   Iframe ID: %s", cfg.PayMobIframeID)
 	}
 
 	log.Printf("Dashboard available at http://localhost%s/dashboard", addr)
@@ -104,19 +100,4 @@ func main() {
 	}
 }
 
-func logConfig(cfg *config.Config) {
-	apiKeyPreview := ""
-	if len(cfg.PayMobAPIKey) > 20 {
-		apiKeyPreview = cfg.PayMobAPIKey[:20] + "..."
-	} else if cfg.PayMobAPIKey != "" {
-		apiKeyPreview = cfg.PayMobAPIKey
-	} else {
-		apiKeyPreview = "(not set)"
-	}
-	log.Printf("Configuration loaded:")
-	log.Printf("  API Key: %s", apiKeyPreview)
-	log.Printf("  Merchant ID: %s", cfg.PayMobMerchantID)
-	log.Printf("  Integration ID: %s", cfg.PayMobIntegrationID)
-	log.Printf("  Iframe ID: %s", cfg.PayMobIframeID)
-	log.Printf("  Demo Mode: %v", cfg.DemoMode)
-}
+

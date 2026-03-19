@@ -93,9 +93,8 @@ func (h *Handler) InitiatePayment(c *fiber.Ctx) error {
 	return c.SendString(html)
 }
 
-// PaymentSuccess handles successful payment redirect
+// PaymentSuccess handles payment redirect - checks actual status before showing result
 func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
-	// PayMob can send order_id as either "order_id" or "merchant_order_id"
 	orderID := c.Query("order_id")
 	if orderID == "" {
 		orderID = c.Query("merchant_order_id")
@@ -106,61 +105,81 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 		transactionID = c.Query("transaction_id")
 	}
 
-	fmt.Printf("PaymentSuccess called: order_id=%s, transaction_id=%s, all_query=%v\n", 
-		orderID, transactionID, c.Queries())
+	// Check for authentication failure indicators from ACE emulator
+	hasError := c.Query("error") != "" ||
+		c.Query("error_occured") == "true" ||
+		c.Query("success") == "false" ||
+		c.Query("auth_result") == "failed" ||
+		c.Query("3ds_status") == "failed" ||
+		c.Query("acs_result") == "N"
 
-	if orderID != "" {
-		ctx := context.Background()
-		payment, err := h.repo.GetByOrderID(ctx, orderID)
-		if err == nil && payment != nil {
-			payment.Status = domain.PaymentStatusSuccess
-			payment.TransactionID = transactionID
-			if err := h.repo.Update(ctx, payment); err != nil {
-				fmt.Printf("PaymentSuccess: Failed to update payment: %v\n", err)
-			} else {
-				fmt.Printf("PaymentSuccess: Updated payment %s to status %s\n", payment.OrderID, payment.Status)
-			}
-		} else {
-			fmt.Printf("PaymentSuccess: Payment not found for order_id=%s, err=%v\n", orderID, err)
-		}
+	fmt.Printf("Payment redirect: order_id=%s, transaction_id=%s, has_error=%v\n", orderID, transactionID, hasError)
+
+	ctx := context.Background()
+	payment, err := h.repo.GetByOrderID(ctx, orderID)
+	if err != nil || payment == nil {
+		// Payment not found, show generic processing page
+		html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
+			Title:   "Payment Processing",
+			Message: "Your payment is being processed. Please check your dashboard for updates.",
+			OrderID: orderID,
+		})
+		c.Set("Content-Type", "text/html")
+		return c.SendString(html)
 	}
 
-	html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
-		Title:   "Payment Successful",
-		Message: "Your payment was completed successfully.",
-		OrderID: orderID,
-	})
-	c.Set("Content-Type", "text/html")
-	return c.SendString(html)
+	// Save transaction ID if provided
+	if transactionID != "" {
+		payment.TransactionID = transactionID
+	}
+
+	// If we detect auth failure indicators, mark as failed immediately
+	if hasError && payment.Status == domain.PaymentStatusPending {
+		payment.Status = domain.PaymentStatusFailed
+		fmt.Printf("PaymentSuccess: Marking payment %s as FAILED due to auth error indicators\n", orderID)
+	}
+
+	h.repo.Update(ctx, payment)
+
+	// Show result based on actual payment status
+	switch payment.Status {
+	case domain.PaymentStatusSuccess:
+		html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
+			Title:   "Payment Successful",
+			Message: "Your payment was completed successfully.",
+			OrderID: orderID,
+		})
+		c.Set("Content-Type", "text/html")
+		return c.SendString(html)
+	case domain.PaymentStatusFailed:
+		html, _ := h.renderer.RenderFailurePage(domain.ResultPageData{
+			Title:   "Payment Failed",
+			Message: "Your payment could not be completed. Please try again.",
+			OrderID: orderID,
+		})
+		c.Set("Content-Type", "text/html")
+		return c.SendString(html)
+	default:
+		// Still pending - show processing page with auto-refresh
+		html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
+			Title:   "Payment Processing",
+			Message: "Your payment is being processed. This page will update shortly...",
+			OrderID: orderID,
+		})
+		c.Set("Content-Type", "text/html")
+		return c.SendString(html)
+	}
 }
 
-// PaymentFailure handles failed payment redirect
+// PaymentFailure handles payment failure redirect - same logic as success since URL is unreliable
 func (h *Handler) PaymentFailure(c *fiber.Ctx) error {
-	// PayMob can send order_id as either "order_id" or "merchant_order_id"
 	orderID := c.Query("order_id")
 	if orderID == "" {
 		orderID = c.Query("merchant_order_id")
 	}
 
-	if orderID != "" {
-		ctx := context.Background()
-		payment, err := h.repo.GetByOrderID(ctx, orderID)
-		if err == nil && payment != nil {
-			payment.Status = domain.PaymentStatusFailed
-			h.repo.Update(ctx, payment)
-		} else {
-			// Log for debugging - payment not found
-			fmt.Printf("PaymentFailure: Payment not found for order_id=%s\n", orderID)
-		}
-	}
-
-	html, _ := h.renderer.RenderFailurePage(domain.ResultPageData{
-		Title:   "Payment Failed",
-		Message: "Your payment was not completed. Please try again.",
-		OrderID: orderID,
-	})
-	c.Set("Content-Type", "text/html")
-	return c.SendString(html)
+	// Use same logic as success handler - check actual status from database
+	return h.PaymentSuccess(c)
 }
 
 // SimulatePaymentPage shows a demo payment simulation page
@@ -284,6 +303,51 @@ func (h *Handler) GetPaymentStatus(c *fiber.Ctx) error {
 		"transaction_id": payment.TransactionID,
 		"amount":         payment.Amount,
 		"currency":       payment.Currency,
+	})
+}
+
+// QueryPayMobStatus queries PayMob directly for transaction status (fallback when webhook fails)
+func (h *Handler) QueryPayMobStatus(c *fiber.Ctx) error {
+	orderID := c.Query("order_id")
+	if orderID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "order_id is required",
+		})
+	}
+
+	ctx := context.Background()
+	payment, err := h.repo.GetByOrderID(ctx, orderID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "payment not found",
+		})
+	}
+
+	// If we have a transaction ID, query PayMob directly
+	if payment.TransactionID != "" && payment.TransactionID != "SIM_"+safeTruncate(orderID, 8) {
+		status, err := h.service.QueryTransactionStatus(ctx, payment.TransactionID)
+		if err == nil && status != nil {
+			// Update payment status if it changed
+			if payment.Status != *status {
+				payment.Status = *status
+				h.repo.Update(ctx, payment)
+				fmt.Printf("QueryPayMobStatus: Updated payment %s to %s\n", orderID, *status)
+			}
+			return c.JSON(fiber.Map{
+				"order_id":       payment.OrderID,
+				"status":         payment.Status,
+				"transaction_id": payment.TransactionID,
+				"source":         "paymob_api",
+			})
+		}
+	}
+
+	// Return current status if we couldn't query PayMob
+	return c.JSON(fiber.Map{
+		"order_id":       payment.OrderID,
+		"status":         payment.Status,
+		"transaction_id": payment.TransactionID,
+		"source":         "local_db",
 	})
 }
 

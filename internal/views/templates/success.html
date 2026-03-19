@@ -4,16 +4,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Successful</title>
+    <title>{{.Title}}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    {{if eq .Title "Payment Processing"}}
+    <script>
+        // Auto-refresh for processing payments
+        const orderID = "{{.OrderID}}";
+        let pollCount = 0;
+        const maxPolls = 20; // Stop after 60 seconds
+
+        function checkStatus() {
+            pollCount++;
+            if (pollCount > maxPolls) {
+                console.log('Stopped polling after max attempts');
+                document.querySelector('.text-gray-600').textContent = 
+                    'Payment status update is taking longer than expected. Please check your dashboard for the final status.';
+                return;
+            }
+
+            // After 3 attempts (9 seconds), try querying PayMob directly
+            const endpoint = pollCount > 3 
+                ? '/api/payments/paymob-status?order_id=' + orderID
+                : '/api/payments/status?order_id=' + orderID;
+
+            fetch(endpoint)
+                .then(r => r.json())
+                .then(data => {
+                    console.log('Status check (' + (data.source || 'local') + '):', data.status);
+                    if (data.status === 'success' || data.status === 'failed') {
+                        window.location.reload();
+                    }
+                })
+                .catch(e => console.error('Status check failed:', e));
+        }
+
+        // Check immediately and then every 3 seconds
+        checkStatus();
+        setInterval(checkStatus, 3000);
+    </script>
+    {{end}}
 </head>
 <body class="bg-gradient-to-br from-green-500 to-emerald-600 min-h-screen flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
+        {{if eq .Title "Payment Processing"}}
+        <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+            <svg class="w-10 h-10 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        {{else}}
         <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
             </svg>
         </div>
+        {{end}}
         <h1 class="text-2xl font-bold text-gray-800 mb-2">{{.Title}}</h1>
         <p class="text-gray-600 mb-6">{{.Message}}</p>
         {{if .OrderID}}

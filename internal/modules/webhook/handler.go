@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"paymob-demo/internal/domain"
 	"paymob-demo/internal/modules/payment"
 	"strconv"
@@ -63,14 +64,24 @@ func (h *Handler) Webhook(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ignored", "reason": "payment not found"})
 	}
 
-	// Update payment status
-	if payload.Obj.Success {
+	// Save transaction ID for all payments (including failed)
+	payment.TransactionID = strconv.Itoa(payload.Obj.ID)
+
+	// Determine status based on PayMob response
+	switch {
+	case payload.Obj.Success:
 		payment.Status = domain.PaymentStatusSuccess
-		payment.TransactionID = strconv.Itoa(payload.Obj.ID)
-	} else if payload.Obj.Pending {
+		fmt.Printf("Webhook: Payment %s marked as SUCCESS (transaction: %d)\n", merchantOrderID, payload.Obj.ID)
+	case payload.Obj.Pending:
 		payment.Status = domain.PaymentStatusPending
-	} else {
+		fmt.Printf("Webhook: Payment %s still PENDING (transaction: %d)\n", merchantOrderID, payload.Obj.ID)
+	default:
 		payment.Status = domain.PaymentStatusFailed
+		if payload.Obj.ErrorMessage != "" {
+			fmt.Printf("Webhook: Payment %s marked as FAILED - %s (transaction: %d)\n", merchantOrderID, payload.Obj.ErrorMessage, payload.Obj.ID)
+		} else {
+			fmt.Printf("Webhook: Payment %s marked as FAILED (transaction: %d)\n", merchantOrderID, payload.Obj.ID)
+		}
 	}
 
 	h.repo.Update(ctx, payment)

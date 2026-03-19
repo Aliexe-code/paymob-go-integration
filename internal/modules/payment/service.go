@@ -13,6 +13,7 @@ import (
 	"paymob-demo/internal/config"
 	"paymob-demo/internal/domain"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -204,14 +205,22 @@ func (s *Service) createOrder(ctx context.Context, authToken, merchantOrderID st
 func (s *Service) getPaymentKey(ctx context.Context, authToken string, orderID int, amountCents int, currency string, req domain.PaymentRequest) (string, error) {
 	integrationID, _ := strconv.Atoi(s.cfg.PayMobIntegrationID)
 
+	// Split full name into first and last name
+	firstName := req.Name
+	lastName := "."
+	if idx := strings.Index(req.Name, " "); idx > 0 {
+		firstName = req.Name[:idx]
+		lastName = req.Name[idx+1:]
+	}
+
 	payload := map[string]interface{}{
 		"auth_token":      authToken,
 		"amount_cents":    amountCents,
 		"expiration":      3600,
 		"order_id":        orderID,
 		"billing_data": map[string]string{
-			"first_name":   req.Name,
-			"last_name":    "Demo",
+			"first_name":   firstName,
+			"last_name":    lastName,
 			"email":        req.Email,
 			"phone_number": req.Phone,
 			"country":      "EG",
@@ -272,4 +281,57 @@ func (s *Service) createDemoPayment(orderID string, amount int, currency string,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 	}
+}
+
+// QueryTransactionStatus queries PayMob for transaction status (fallback when webhook fails)
+func (s *Service) QueryTransactionStatus(ctx context.Context, transactionID string) (*domain.PaymentStatus, error) {
+	if s.cfg.DemoMode || s.cfg.PayMobAPIKey == "" {
+		return nil, fmt.Errorf("cannot query transaction status in demo mode")
+	}
+
+	// Authenticate
+	authToken, err := s.authenticate(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Query transaction
+	url := fmt.Sprintf("%s/api/acceptance/transactions/%s", s.baseURL, transactionID)
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+authToken)
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("query failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		ID      int    `json:"id"`
+		Success bool   `json:"success"`
+		Pending bool   `json:"pending"`
+		Error   string `json:"error_occured"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	var status domain.PaymentStatus
+	switch {
+	case result.Success:
+		status = domain.PaymentStatusSuccess
+	case result.Pending:
+		status = domain.PaymentStatusPending
+	default:
+		status = domain.PaymentStatusFailed
+	}
+
+	return &status, nil
 }
