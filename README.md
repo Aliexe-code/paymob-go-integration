@@ -1,13 +1,12 @@
 # PayMob Go Integration
 
-A production-ready Go payment integration with PayMob (Accept). Features modular monolith architecture, HTMX frontend, comprehensive test coverage, and real-time payment status tracking.
+A production-ready Go payment integration with PayMob (Accept). Features modular monolith architecture, HTMX frontend, and real-time payment status tracking.
 
 ## Features
 
 - **Modular Monolith Architecture** - Clean separation of concerns with domain-driven design
 - **Real PayMob Integration** - Production-ready payment processing
 - **HTMX Frontend** - Modern, responsive UI with minimal JavaScript
-- **Comprehensive Testing** - 78%+ test coverage including mocked API tests
 - **Real-time Status Tracking** - Live payment status updates
 - **Docker Support** - Containerized deployment ready
 
