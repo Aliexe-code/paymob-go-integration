@@ -19,14 +19,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service implements PaymentService for PayMob integration
 type Service struct {
 	cfg        *config.Config
 	httpClient *http.Client
-	baseURL    string // Configurable for testing
+	baseURL    string
 }
 
-// NewService creates a new payment service
 func NewService(cfg *config.Config) *Service {
 	return &Service{
 		cfg: cfg,
@@ -37,7 +35,6 @@ func NewService(cfg *config.Config) *Service {
 	}
 }
 
-// NewServiceWithClient creates a service with custom HTTP client and base URL (for testing)
 func NewServiceWithClient(cfg *config.Config, httpClient *http.Client, baseURL string) *Service {
 	return &Service{
 		cfg:        cfg,
@@ -46,7 +43,6 @@ func NewServiceWithClient(cfg *config.Config, httpClient *http.Client, baseURL s
 	}
 }
 
-// API response types
 type authResponse struct {
 	Token string `json:"token"`
 }
@@ -59,7 +55,6 @@ type paymentKeyResponse struct {
 	Token string `json:"token"`
 }
 
-// InitiatePayment creates a payment order and gets payment key
 func (s *Service) InitiatePayment(ctx context.Context, req domain.PaymentRequest) (*domain.Payment, error) {
 	orderID := uuid.New().String()
 	amount := req.Amount
@@ -68,30 +63,25 @@ func (s *Service) InitiatePayment(ctx context.Context, req domain.PaymentRequest
 		currency = "EGP"
 	}
 
-	// Demo mode
 	if s.cfg.DemoMode || s.cfg.PayMobAPIKey == "" {
 		return s.createDemoPayment(orderID, amount, currency, req), nil
 	}
 
-	// Step 1: Authenticate
 	authToken, err := s.authenticate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", domain.ErrAuthenticationFailed, err)
 	}
 
-	// Step 2: Create Order
 	paymobOrderID, err := s.createOrder(ctx, authToken, orderID, amount*100, currency)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", domain.ErrOrderCreationFailed, err)
 	}
 
-	// Step 3: Get Payment Key
 	paymentKey, err := s.getPaymentKey(ctx, authToken, paymobOrderID, amount*100, currency, req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", domain.ErrPaymentKeyFailed, err)
 	}
 
-	// Build checkout URL
 	checkoutURL := s.GetCheckoutURL(paymentKey)
 
 	return &domain.Payment{
@@ -108,7 +98,6 @@ func (s *Service) InitiatePayment(ctx context.Context, req domain.PaymentRequest
 	}, nil
 }
 
-// GetCheckoutURL creates the PayMob checkout iframe URL
 func (s *Service) GetCheckoutURL(paymentKey string) string {
 	iframeID := s.cfg.PayMobIframeID
 	if iframeID == "" {
@@ -118,7 +107,6 @@ func (s *Service) GetCheckoutURL(paymentKey string) string {
 		s.baseURL, iframeID, paymentKey)
 }
 
-// VerifyWebhookSignature verifies the HMAC signature from PayMob webhook
 func (s *Service) VerifyWebhookSignature(signature string, payload []byte) bool {
 	if s.cfg.PayMobHMACSecret == "" {
 		return true
@@ -131,7 +119,6 @@ func (s *Service) VerifyWebhookSignature(signature string, payload []byte) bool 
 	return hmac.Equal([]byte(signature), []byte(expectedSignature))
 }
 
-// authenticate gets an auth token from PayMob
 func (s *Service) authenticate(ctx context.Context) (string, error) {
 	payload := map[string]string{"api_key": s.cfg.PayMobAPIKey}
 	jsonData, _ := json.Marshal(payload)
@@ -163,7 +150,6 @@ func (s *Service) authenticate(ctx context.Context) (string, error) {
 	return authResp.Token, nil
 }
 
-// createOrder registers an order with PayMob
 func (s *Service) createOrder(ctx context.Context, authToken, merchantOrderID string, amountCents int, currency string) (int, error) {
 	merchantID, _ := strconv.Atoi(s.cfg.PayMobMerchantID)
 
@@ -201,11 +187,9 @@ func (s *Service) createOrder(ctx context.Context, authToken, merchantOrderID st
 	return orderResp.ID, nil
 }
 
-// getPaymentKey generates a payment key for the iframe
 func (s *Service) getPaymentKey(ctx context.Context, authToken string, orderID int, amountCents int, currency string, req domain.PaymentRequest) (string, error) {
 	integrationID, _ := strconv.Atoi(s.cfg.PayMobIntegrationID)
 
-	// Split full name into first and last name
 	firstName := req.Name
 	lastName := "."
 	if idx := strings.Index(req.Name, " "); idx > 0 {
@@ -265,7 +249,6 @@ func (s *Service) getPaymentKey(ctx context.Context, authToken string, orderID i
 	return keyResp.Token, nil
 }
 
-// createDemoPayment creates a mock payment for demo mode
 func (s *Service) createDemoPayment(orderID string, amount int, currency string, req domain.PaymentRequest) *domain.Payment {
 	mockPaymentKey := "demo_" + uuid.New().String()[:8]
 
@@ -283,19 +266,16 @@ func (s *Service) createDemoPayment(orderID string, amount int, currency string,
 	}
 }
 
-// QueryTransactionStatus queries PayMob for transaction status (fallback when webhook fails)
 func (s *Service) QueryTransactionStatus(ctx context.Context, transactionID string) (*domain.PaymentStatus, error) {
 	if s.cfg.DemoMode || s.cfg.PayMobAPIKey == "" {
 		return nil, fmt.Errorf("cannot query transaction status in demo mode")
 	}
 
-	// Authenticate
 	authToken, err := s.authenticate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
-	// Query transaction
 	url := fmt.Sprintf("%s/api/acceptance/transactions/%s", s.baseURL, transactionID)
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+authToken)

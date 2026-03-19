@@ -10,47 +10,37 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Repository implements PaymentRepository using SQLite
 type Repository struct {
-	db *sql.DB
-
-	// Prepared statements
+	db               *sql.DB
 	stmtAdd          *sql.Stmt
 	stmtGetByID      *sql.Stmt
 	stmtGetByOrderID *sql.Stmt
 	stmtUpdate       *sql.Stmt
 	stmtRecent       *sql.Stmt
-
-	// Dashboard cache
-	cacheMu        sync.RWMutex
-	dashboardCache *domain.DashboardData
-	cacheExpiry    time.Time
-	cacheDuration  time.Duration
+	cacheMu          sync.RWMutex
+	dashboardCache   *domain.DashboardData
+	cacheExpiry      time.Time
+	cacheDuration    time.Duration
 }
 
-// NewRepository creates a new payment repository
 func NewRepository(dbPath string) (*Repository, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Connection pooling
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	// Enable WAL mode
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		return nil, err
 	}
 
-	// SQLite optimizations
 	db.Exec(`PRAGMA synchronous=NORMAL`)
 	db.Exec(`PRAGMA cache_size=10000`)
 	db.Exec(`PRAGMA temp_store=MEMORY`)
 
-	// Create table
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS payments (
 			id TEXT PRIMARY KEY,
@@ -69,12 +59,9 @@ func NewRepository(dbPath string) (*Repository, error) {
 		return nil, err
 	}
 
-	// Create indexes
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments(created_at DESC)`)
-
-	// Prepare statements
 	stmtAdd, _ := db.Prepare(`INSERT INTO payments (id, order_id, amount, currency, status, checkout_url, paymob_order_id, paymob_payment_key, transaction_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	stmtGetByID, _ := db.Prepare(`SELECT id, order_id, amount, currency, status, checkout_url, paymob_order_id, paymob_payment_key, transaction_id, created_at, updated_at FROM payments WHERE id = ?`)
 	stmtGetByOrderID, _ := db.Prepare(`SELECT id, order_id, amount, currency, status, checkout_url, paymob_order_id, paymob_payment_key, transaction_id, created_at, updated_at FROM payments WHERE order_id = ?`)
@@ -116,7 +103,6 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Payment, error
 	return payment, nil
 }
 
-// GetByOrderID retrieves a payment by order ID
 func (r *Repository) GetByOrderID(ctx context.Context, orderID string) (*domain.Payment, error) {
 	payment := &domain.Payment{}
 	err := r.stmtGetByOrderID.QueryRowContext(ctx, orderID).Scan(&payment.ID, &payment.OrderID, &payment.Amount, &payment.Currency, &payment.Status,
@@ -128,7 +114,6 @@ func (r *Repository) GetByOrderID(ctx context.Context, orderID string) (*domain.
 	return payment, nil
 }
 
-// GetAll retrieves all payments
 func (r *Repository) GetAll(ctx context.Context) ([]*domain.Payment, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT id, order_id, amount, currency, status, checkout_url, paymob_order_id, paymob_payment_key, transaction_id, created_at, updated_at FROM payments ORDER BY created_at DESC`)
 	if err != nil {
@@ -149,7 +134,6 @@ func (r *Repository) GetAll(ctx context.Context) ([]*domain.Payment, error) {
 	return payments, nil
 }
 
-// Update updates a payment
 func (r *Repository) Update(ctx context.Context, payment *domain.Payment) error {
 	payment.UpdatedAt = time.Now()
 	_, err := r.stmtUpdate.ExecContext(ctx, payment.Amount, payment.Currency, payment.Status, payment.CheckoutURL,
@@ -161,9 +145,7 @@ func (r *Repository) Update(ctx context.Context, payment *domain.Payment) error 
 	return nil
 }
 
-// GetDashboardData returns aggregated dashboard data with caching
 func (r *Repository) GetDashboardData(ctx context.Context) (*domain.DashboardData, error) {
-	// Check cache
 	r.cacheMu.RLock()
 	if r.dashboardCache != nil && time.Now().Before(r.cacheExpiry) {
 		data := r.dashboardCache
@@ -191,7 +173,6 @@ func (r *Repository) GetDashboardData(ctx context.Context) (*domain.DashboardDat
 		data.TotalAmount = 0
 	}
 
-	// Get recent payments
 	rows, err := r.stmtRecent.QueryContext(ctx)
 	if err == nil {
 		defer rows.Close()
@@ -206,7 +187,6 @@ func (r *Repository) GetDashboardData(ctx context.Context) (*domain.DashboardDat
 		}
 	}
 
-	// Update cache
 	r.cacheMu.Lock()
 	r.dashboardCache = data
 	r.cacheExpiry = time.Now().Add(r.cacheDuration)

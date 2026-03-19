@@ -11,7 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// Handler handles payment HTTP requests
 type Handler struct {
 	service   *Service
 	repo      *Repository
@@ -19,7 +18,6 @@ type Handler struct {
 	cfg       *config.Config
 }
 
-// NewHandler creates a new payment handler
 func NewHandler(service *Service, repo *Repository, renderer *views.Renderer, cfg *config.Config) *Handler {
 	return &Handler{
 		service:  service,
@@ -29,7 +27,6 @@ func NewHandler(service *Service, repo *Repository, renderer *views.Renderer, cf
 	}
 }
 
-// GetPaymentPage serves the payment page
 func (h *Handler) GetPaymentPage(c *fiber.Ctx) error {
 	html, err := h.renderer.RenderPaymentPage(domain.PaymentPageData{
 		Title: "PayMob Demo - Make Payment",
@@ -41,7 +38,6 @@ func (h *Handler) GetPaymentPage(c *fiber.Ctx) error {
 	return c.SendString(html)
 }
 
-// InitiatePayment initiates a new payment
 func (h *Handler) InitiatePayment(c *fiber.Ctx) error {
 	var req domain.PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -93,7 +89,6 @@ func (h *Handler) InitiatePayment(c *fiber.Ctx) error {
 	return c.SendString(html)
 }
 
-// PaymentSuccess handles payment redirect - checks actual status before showing result
 func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 	orderID := c.Query("order_id")
 	if orderID == "" {
@@ -105,7 +100,6 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 		transactionID = c.Query("transaction_id")
 	}
 
-	// Check for authentication failure indicators from ACE emulator
 	hasError := c.Query("error") != "" ||
 		c.Query("error_occured") == "true" ||
 		c.Query("success") == "false" ||
@@ -118,7 +112,6 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 	ctx := context.Background()
 	payment, err := h.repo.GetByOrderID(ctx, orderID)
 	if err != nil || payment == nil {
-		// Payment not found, show generic processing page
 		html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
 			Title:   "Payment Processing",
 			Message: "Your payment is being processed. Please check your dashboard for updates.",
@@ -128,12 +121,10 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 		return c.SendString(html)
 	}
 
-	// Save transaction ID if provided
 	if transactionID != "" {
 		payment.TransactionID = transactionID
 	}
 
-	// If we detect auth failure indicators, mark as failed immediately
 	if hasError && payment.Status == domain.PaymentStatusPending {
 		payment.Status = domain.PaymentStatusFailed
 		fmt.Printf("PaymentSuccess: Marking payment %s as FAILED due to auth error indicators\n", orderID)
@@ -141,7 +132,6 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 
 	h.repo.Update(ctx, payment)
 
-	// Show result based on actual payment status
 	switch payment.Status {
 	case domain.PaymentStatusSuccess:
 		html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
@@ -160,7 +150,6 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 		c.Set("Content-Type", "text/html")
 		return c.SendString(html)
 	default:
-		// Still pending - show processing page with auto-refresh
 		html, _ := h.renderer.RenderSuccessPage(domain.ResultPageData{
 			Title:   "Payment Processing",
 			Message: "Your payment is being processed. This page will update shortly...",
@@ -171,18 +160,15 @@ func (h *Handler) PaymentSuccess(c *fiber.Ctx) error {
 	}
 }
 
-// PaymentFailure handles payment failure redirect - same logic as success since URL is unreliable
 func (h *Handler) PaymentFailure(c *fiber.Ctx) error {
 	orderID := c.Query("order_id")
 	if orderID == "" {
 		orderID = c.Query("merchant_order_id")
 	}
 
-	// Use same logic as success handler - check actual status from database
 	return h.PaymentSuccess(c)
 }
 
-// SimulatePaymentPage shows a demo payment simulation page
 func (h *Handler) SimulatePaymentPage(c *fiber.Ctx) error {
 	orderID := c.Query("order_id")
 	if orderID == "" {
@@ -212,7 +198,6 @@ func (h *Handler) SimulatePaymentPage(c *fiber.Ctx) error {
 	return c.SendString(html)
 }
 
-// SimulatePaymentSuccess simulates a payment success
 func (h *Handler) SimulatePaymentSuccess(c *fiber.Ctx) error {
 	orderID := c.Params("order_id")
 	if orderID == "" {
@@ -249,7 +234,6 @@ func (h *Handler) SimulatePaymentSuccess(c *fiber.Ctx) error {
 	return c.SendString(html)
 }
 
-// SimulatePaymentFailure simulates a payment failure
 func (h *Handler) SimulatePaymentFailure(c *fiber.Ctx) error {
 	orderID := c.Params("order_id")
 	if orderID == "" {
@@ -272,7 +256,6 @@ func (h *Handler) SimulatePaymentFailure(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "failed", "order_id": orderID})
 }
 
-// HealthCheck returns health status
 func (h *Handler) HealthCheck(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":  "healthy",
@@ -280,7 +263,6 @@ func (h *Handler) HealthCheck(c *fiber.Ctx) error {
 	})
 }
 
-// GetPaymentStatus returns the status of a payment by order ID
 func (h *Handler) GetPaymentStatus(c *fiber.Ctx) error {
 	orderID := c.Query("order_id")
 	if orderID == "" {
@@ -306,7 +288,6 @@ func (h *Handler) GetPaymentStatus(c *fiber.Ctx) error {
 	})
 }
 
-// QueryPayMobStatus queries PayMob directly for transaction status (fallback when webhook fails)
 func (h *Handler) QueryPayMobStatus(c *fiber.Ctx) error {
 	orderID := c.Query("order_id")
 	if orderID == "" {
@@ -323,11 +304,9 @@ func (h *Handler) QueryPayMobStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	// If we have a transaction ID, query PayMob directly
 	if payment.TransactionID != "" && payment.TransactionID != "SIM_"+safeTruncate(orderID, 8) {
 		status, err := h.service.QueryTransactionStatus(ctx, payment.TransactionID)
 		if err == nil && status != nil {
-			// Update payment status if it changed
 			if payment.Status != *status {
 				payment.Status = *status
 				h.repo.Update(ctx, payment)
@@ -342,7 +321,6 @@ func (h *Handler) QueryPayMobStatus(c *fiber.Ctx) error {
 		}
 	}
 
-	// Return current status if we couldn't query PayMob
 	return c.JSON(fiber.Map{
 		"order_id":       payment.OrderID,
 		"status":         payment.Status,
@@ -351,7 +329,6 @@ func (h *Handler) QueryPayMobStatus(c *fiber.Ctx) error {
 	})
 }
 
-// Benchmark handles performance benchmarking
 func (h *Handler) Benchmark(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message":        "Performance Benchmark",
@@ -361,7 +338,6 @@ func (h *Handler) Benchmark(c *fiber.Ctx) error {
 	})
 }
 
-// safeTruncate safely truncates a string to max length
 func safeTruncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

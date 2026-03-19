@@ -145,8 +145,7 @@
 <body class="gradient-bg min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-4xl flex flex-col lg:flex-row gap-6 animate-fade-in">
         
-        <!-- Left Side - Info -->
-        <div class="lg:w-2/5 text-white flex flex-col justify-center p-6">
+                <div class="lg:w-2/5 text-white flex flex-col justify-center p-6">
             <div class="mb-8">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-2xl mb-6 backdrop-blur-sm">
                     <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,8 +193,7 @@
             </div>
         </div>
 
-        <!-- Right Side - Form -->
-        <div class="lg:w-3/5">
+                <div class="lg:w-3/5">
             <div class="glass-card rounded-3xl shadow-2xl p-8">
                 <div class="mb-8">
                     <h2 class="text-2xl font-bold text-gray-800">Payment Details</h2>
@@ -207,7 +205,7 @@
                       hx-on::before-request="document.getElementById('payBtn').disabled = true; document.getElementById('btnText').textContent = 'Processing...'; document.getElementById('spinner').classList.remove('hidden');"
                       hx-on::after-request="document.getElementById('payBtn').disabled = false; document.getElementById('btnText').textContent = 'Pay Now'; document.getElementById('spinner').classList.add('hidden');">
                     
-                    <!-- Amount Input - EGP Only -->
+
                     <div>
                         <label for="amount" class="block text-sm font-semibold text-gray-700 mb-2">Amount (EGP)</label>
                         <input type="number" name="amount" id="amount" required min="1" step="1"
@@ -220,21 +218,21 @@
                         </div>
                     </div>
 
-                    <!-- Name Input -->
+
                     <div>
                         <label for="name" class="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
                         <input type="text" name="name" id="name" required 
                                class="input-field" style="padding-left: 8px;" minlength="3">
                     </div>
 
-                    <!-- Email Input -->
+
                     <div>
                         <label for="email" class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
                         <input type="email" name="email" id="email" required 
                                class="input-field" style="padding-left: 8px;">
                     </div>
 
-                    <!-- Phone Input -->
+
                     <div>
                         <label for="phone" class="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
                         <div class="relative">
@@ -248,7 +246,7 @@
                         </div>
                     </div>
 
-                    <!-- Submit Button -->
+
                     <button type="submit" id="payBtn" 
                             class="pay-button w-full text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 mt-8 shadow-lg">
                         <span id="spinner" class="spinner hidden"></span>
@@ -259,10 +257,10 @@
                     </button>
                 </form>
 
-                <!-- Result Container -->
+
                 <div id="result" class="mt-6"></div>
 
-                <!-- Footer -->
+    
                 <div class="mt-8 pt-6 border-t border-gray-100 flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <div class="flex -space-x-2">
