@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  paymob-demo:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - PAYMOBI_API_KEY=${PAYMOBI_API_KEY:-test_api_key}
+      - PAYMOBI_MERCHANT_ID=${PAYMOBI_MERCHANT_ID:-test_merchant_id}
+      - PAYMOBI_BASE_URL=https://accept.paymobsolutions.com
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-webhook_secret}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - paymob-network
+
+networks:
+  paymob-network:
+    driver: bridge

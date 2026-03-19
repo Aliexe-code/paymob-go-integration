@@ -1,0 +1,9 @@
+# Database
+*.db
+*.db-journal
+
+# Environment
+.env
+
+# Binary
+paymob-demo

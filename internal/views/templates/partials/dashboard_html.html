@@ -1,0 +1,52 @@
+{{define "dashboard_html"}}
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 p-6">
+    <div class="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/20">
+        <div class="text-slate-400 text-sm">Total Payments</div>
+        <div class="text-3xl font-bold text-white mt-2">{{.TotalPayments}}</div>
+    </div>
+    <div class="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/20">
+        <div class="text-slate-400 text-sm">Total Amount</div>
+        <div class="text-3xl font-bold text-white mt-2">{{.TotalAmount}} EGP</div>
+    </div>
+    <div class="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/20">
+        <div class="text-green-400 text-sm">Successful</div>
+        <div class="text-3xl font-bold text-green-400 mt-2">{{.SuccessCount}}</div>
+    </div>
+    <div class="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/20">
+        <div class="text-red-400 text-sm">Failed</div>
+        <div class="text-3xl font-bold text-red-400 mt-2">{{.FailedCount}}</div>
+    </div>
+</div>
+<table class="w-full">
+    <thead class="bg-white/5">
+        <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Order ID</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Amount</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Action</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Created</th>
+        </tr>
+    </thead>
+    <tbody class="divide-y divide-white/10">
+        {{range .RecentPayments}}
+        <tr>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white font-mono">{{.OrderID}}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">{{.Amount}} {{.Currency}}</td>
+            <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-1 text-xs font-semibold rounded-full {{.Status | statusClass}}">{{.StatusText}}</span></td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                {{if eq .Status "pending"}}
+                <button hx-post="/api/simulate/{{.OrderID}}" hx-target="closest tr" hx-swap="outerHTML" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded">Simulate Success</button>
+                {{else if eq .Status "success"}}
+                <span class="text-green-400">✓ Completed</span>
+                {{else}}
+                <span class="text-red-400">✗ Failed</span>
+                {{end}}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">{{.CreatedAt}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">No payments yet. Make a payment to see it here!</td></tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}

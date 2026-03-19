@@ -1,0 +1,117 @@
+{{define "payment_result"}}
+{{if .Success}}
+<div class="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6 animate-fade-in" id="payment-result-{{.OrderID}}">
+    <div class="flex items-start gap-4">
+        <div class="flex-shrink-0 w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="text-lg font-bold text-gray-800 mb-1">Payment Ready!</h3>
+            <p class="text-gray-600 mb-3">Your payment of <span class="font-bold text-green-600">{{.Amount | formatAmount}} {{.Currency}}</span> has been prepared.</p>
+            
+            <div class="bg-white rounded-xl p-4 mb-4 border border-green-100">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-gray-500">Order ID</span>
+                    <code class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">{{.OrderID}}</code>
+                </div>
+            </div>
+
+            <a href="{{.CheckoutURL}}" target="_blank" id="checkout-btn-{{.OrderID}}"
+               onclick="handleCheckoutClick(this, '{{.OrderID}}')"
+               class="inline-flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3.5 rounded-xl font-semibold transition-all hover:shadow-lg hover:shadow-green-200"
+               data-clicked="false">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+                <span class="btn-text">Proceed to Secure Checkout</span>
+            </a>
+            <p class="text-xs text-gray-400 mt-3 text-center">You'll be redirected to our secure payment partner</p>
+        </div>
+    </div>
+</div>
+<script>
+function handleCheckoutClick(btn, orderID) {
+    // Mark as clicked to prevent multiple clicks
+    if (btn.getAttribute('data-clicked') === 'true') {
+        return false;
+    }
+    btn.setAttribute('data-clicked', 'true');
+    btn.querySelector('.btn-text').textContent = 'Payment in Progress...';
+    btn.classList.add('opacity-75');
+    
+    // Open payment in new window and monitor it
+    var paymentWindow = window.open(btn.href, 'paymob_payment');
+    
+    // Check status more frequently after click
+    var checkInterval = setInterval(function() {
+        fetch('/api/payments/status?order_id=' + orderID)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                console.log('Status check:', data.status);
+                if (data.status === 'success' || data.status === 'failed') {
+                    clearInterval(checkInterval);
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                    btn.style.pointerEvents = 'none';
+                    btn.querySelector('.btn-text').textContent = data.status === 'success' ? '✓ Payment Completed' : '✗ Payment Failed';
+                    if (data.status === 'success') {
+                        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                        btn.classList.add('bg-gray-400');
+                    }
+                }
+            })
+            .catch(function(e) { console.error('Status check failed:', e); });
+    }, 2000);
+    
+    return true;
+}
+
+(function() {
+    var orderID = '{{.OrderID}}';
+    var checkInterval = setInterval(function() {
+        fetch('/api/payments/status?order_id=' + orderID)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                console.log('Auto status check:', data.status);
+                var btn = document.getElementById('checkout-btn-' + orderID);
+                if (!btn) return;
+                
+                if (data.status === 'success' || data.status === 'failed') {
+                    clearInterval(checkInterval);
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                    btn.style.pointerEvents = 'none';
+                    btn.querySelector('.btn-text').textContent = data.status === 'success' ? '✓ Payment Completed' : '✗ Payment Failed';
+                    if (data.status === 'success') {
+                        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                        btn.classList.add('bg-gray-400');
+                    }
+                }
+            })
+            .catch(function(e) { console.error('Status check failed:', e); });
+    }, 3000);
+})();
+</script>
+{{else}}
+<div class="bg-gradient-to-br from-red-50 to-rose-50 border border-red-200 rounded-2xl p-6 animate-fade-in">
+    <div class="flex items-start gap-4">
+        <div class="flex-shrink-0 w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="text-lg font-bold text-gray-800 mb-1">Payment Failed</h3>
+            <p class="text-gray-600">{{.Message}}</p>
+            <button onclick="document.getElementById('paymentForm').reset(); document.getElementById('result').innerHTML = '';" 
+                    class="mt-4 text-sm font-medium text-red-600 hover:text-red-800 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Try Again
+            </button>
+        </div>
+    </div>
+</div>
+{{end}}
+{{end}}
