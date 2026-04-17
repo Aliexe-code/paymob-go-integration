@@ -1,29 +1,45 @@
-.PHONY: run build test docker-up docker-down clean
+.PHONY: run build build-web test test-web dev dev-web docker-up docker-down clean
 
-# Build the application
+# Build API-only binary
 build:
-	go build -o paymob-demo ./cmd/server
+	cd api && go build -o ../paymob-api ./cmd/server/
 
-# Run the application
+# Build with web frontend (HTMX)
+build-web:
+	cd api && go build -tags web -o ../paymob-full ./cmd/server/
+
+# Run API-only
 run: build
-	./paymob-demo
+	./paymob-api
 
-# Run in development mode
+# Run with web frontend
+run-web: build-web
+	./paymob-full
+
+# Development mode - API only
 dev:
-	go run ./cmd/server
+	cd api && go run ./cmd/server/
+
+# Development mode - with web frontend
+dev-web:
+	cd api && go run -tags web ./cmd/server/
+
+# Run web frontend standalone (separate terminal)
+dev-web-frontend:
+	cd web && go run ./cmd/server/
 
 # Run tests
 test:
-	go test -v ./...
+	cd api && go test -tags web ./...
 
 # Run tests with coverage
 test-coverage:
-	go test -coverprofile=coverage.out ./...
+	cd api && go test -tags web -coverprofile=../coverage.out ./...
 	go tool cover -func=coverage.out | tail -1
 
 # Run benchmarks
 bench:
-	go test -bench=. -benchmem ./...
+	cd api && go test -tags web -bench=. -benchmem ./...
 
 # Docker build
 docker-build:
@@ -39,16 +55,20 @@ docker-down:
 
 # Clean build artifacts
 clean:
-	rm -f paymob-demo
+	rm -f paymob-api paymob-full
 
 # Show help
 help:
 	@echo "PayMob Demo - Available commands:"
-	@echo "  make build       - Build the Go application"
-	@echo "  make run         - Build and run the application"
-	@echo "  make dev         - Run in development mode"
-	@echo "  make test        - Run unit tests"
-	@echo "  make bench       - Run performance benchmarks"
-	@echo "  make docker-up   - Start with Docker"
-	@echo "  make docker-down - Stop Docker containers"
-	@echo "  make clean       - Remove build artifacts"
+	@echo "  make build          - Build API-only binary"
+	@echo "  make build-web      - Build with HTMX web frontend"
+	@echo "  make run            - Build and run API-only"
+	@echo "  make run-web        - Build and run with web frontend"
+	@echo "  make dev            - Run API-only (development)"
+	@echo "  make dev-web        - Run with web frontend (development)"
+	@echo "  make dev-web-frontend - Run standalone web frontend"
+	@echo "  make test           - Run tests"
+	@echo "  make bench          - Run benchmarks"
+	@echo "  make docker-up      - Start with Docker"
+	@echo "  make docker-down    - Stop Docker containers"
+	@echo "  make clean          - Remove build artifacts"

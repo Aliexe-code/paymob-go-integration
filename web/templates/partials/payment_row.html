@@ -1,0 +1,15 @@
+{{define "payment_row"}}
+<td class="px-6 py-4 whitespace-nowrap text-sm text-white font-mono">{{.OrderID}}</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-white">{{.Amount}} {{.Currency}}</td>
+<td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-1 text-xs font-semibold rounded-full {{.Status | statusClass}}">{{.StatusText}}</span></td>
+<td class="px-6 py-4 whitespace-nowrap">
+    {{if eq .Status "success"}}
+    <span class="text-green-400">✓ Completed</span>
+    {{else if eq .Status "failed"}}
+    <span class="text-red-400">✗ Failed</span>
+    {{else}}
+    <button hx-post="/api/simulate/{{.OrderID}}" hx-target="closest tr" hx-swap="outerHTML" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded">Simulate Success</button>
+    {{end}}
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">{{.CreatedAt}}</td>
+{{end}}

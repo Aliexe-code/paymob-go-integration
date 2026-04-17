@@ -7,8 +7,11 @@
 # Environment
 .env
 
-# Binary
+# Binaries
 paymob-demo
+paymob-api
+paymob-full
+web/server
 
 # Test coverage
 coverage.out
